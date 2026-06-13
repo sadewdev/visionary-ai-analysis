@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Visionary AI - A free, fast, and secure browser-based Object-Based Image Analysis tool. Processing happens locally for 100% privacy.">
+    <meta name="keywords" content="AI, Object Detection, Computer Vision, Local AI, TensorFlow.js, Browser AI, Privacy First AI, Sadew Dev">
+    <meta name="author" content="Sadew Dev">
+    <meta property="og:title" content="Visionary - Local AI Image Analysis">
+    <meta property="og:description" content="Free and secure object detection right in your browser. Powered by TensorFlow.js and developed by Sadew Dev.">
+    <meta property="og:type" content="website">
+    <title>Visionary - AI Image Analysis</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Dexie.js for Local Database -->
+    <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
+    
+    <!-- TensorFlow.js & COCO-SSD for Object Detection -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Custom Tailwind Configuration -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                            900: '#312e81',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+
+        .drop-zone {
+            border: 2px dashed #cbd5e1;
+            transition: all 0.3s ease;
+        }
+        .drop-zone.dragover {
+            background-color: #eef2ff;
+            border-color: #6366f1;
+        }
+
+        /* Loader Animation */
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #4f46e5;
+            width: 24px;
+            height: 24px;
+            -webkit-animation: spin 1s linear infinite; /* Safari */
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- Navigation Bar -->
+    <nav class="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-2 cursor-pointer" onclick="app.showView('upload')">
+                    <div class="bg-primary-600 text-white p-2 rounded-lg">
+                        <i data-lucide="scan-line" class="w-6 h-6"></i>
+                    </div>
+                    <span class="font-bold text-xl tracking-tight text-slate-900">Visionary<span class="text-primary-600">AI</span></span>
+                </div>
+                
+                <div class="flex items-center gap-4">
+                    <!-- Model Status Badge -->
+                    <div id="model-status" class="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                        <div class="loader w-3 h-3 border-2 border-amber-300 border-t-amber-700"></div>
+                        Loading AI Model...
+                    </div>
+
+                    <button onclick="app.showView('upload')" class="text-slate-600 hover:text-primary-600 font-medium px-3 py-2 rounded-md transition-colors flex items-center gap-2">
+                        <i data-lucide="image-plus" class="w-4 h-4"></i>
+                        <span class="hidden sm:inline">New Analysis</span>
+                    </button>
+                    <button onclick="app.showView('history')" class="text-slate-600 hover:text-primary-600 font-medium px-3 py-2 rounded-md transition-colors flex items-center gap-2">
+                        <i data-lucide="library" class="w-4 h-4"></i>
+                        <span class="hidden sm:inline">History</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="flex-grow max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
+        
+        <!-- ================= UPLOAD VIEW ================= -->
+        <div id="view-upload" class="view-section animate-fade-in block">
+            <div class="text-center max-w-2xl mx-auto mb-10">
+                <h1 class="text-4xl font-extrabold text-slate-900 mb-4 tracking-tight">Discover what's in your images.</h1>
+                <p class="text-lg text-slate-500">Upload any image and our local AI will detect and identify objects instantly, securely on your device.</p>
+            </div>
+
+            <div class="max-w-3xl mx-auto">
+                <div id="drop-zone" class="drop-zone rounded-2xl bg-white p-12 text-center cursor-pointer shadow-sm hover:shadow-md group relative overflow-hidden">
+                    <input type="file" id="file-input" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" accept="image/jpeg, image/png, image/webp" disabled>
+                    
+                    <div class="pointer-events-none flex flex-col items-center justify-center space-y-4">
+                        <div class="bg-primary-50 text-primary-600 p-4 rounded-full group-hover:scale-110 transition-transform duration-300">
+                            <i data-lucide="upload-cloud" class="w-10 h-10"></i>
+                        </div>
+                        <div>
+                            <p class="text-lg font-semibold text-slate-700" id="upload-text">Drag and drop an image, or click to browse</p>
+                            <p class="text-sm text-slate-400 mt-1">Supports JPG, PNG, WEBP (Max 5MB)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= ANALYSIS VIEW ================= -->
+        <div id="view-analysis" class="view-section hidden">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-bold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="cpu" class="text-primary-600"></i> Analysis Results
+                </h2>
+                <button onclick="app.showView('upload')" class="text-sm font-medium text-slate-500 hover:text-slate-800 flex items-center gap-1 transition-colors">
+                    <i data-lucide="arrow-left" class="w-4 h-4"></i> Analyze Another
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- Image & Canvas Container -->
+                <div class="lg:col-span-2 bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
+                    <div class="relative rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center min-h-[400px]" id="canvas-container">
+                        <!-- Loading State for Analysis -->
+                        <div id="analysis-loader" class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm flex flex-col items-center justify-center z-20 text-white hidden">
+                            <div class="loader mb-4 border-t-white"></div>
+                            <p class="font-medium">Analyzing visual data...</p>
+                        </div>
+                        
+                        <img id="source-image" class="hidden" alt="Source">
+                        <canvas id="analysis-canvas" class="max-w-full h-auto rounded-lg shadow-sm"></canvas>
+                    </div>
+                </div>
+
+                <!-- Results Sidebar -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col h-full max-h-[600px]">
+                    <div class="p-5 border-b border-slate-100 bg-slate-50 rounded-t-2xl">
+                        <h3 class="font-semibold text-slate-800">Detected Objects</h3>
+                        <p class="text-xs text-slate-500 mt-1" id="detection-count">0 objects found</p>
+                    </div>
+                    
+                    <div class="p-5 flex-grow overflow-y-auto" id="results-list">
+                        <!-- Results will be injected here -->
+                        <div class="flex flex-col items-center justify-center h-full text-slate-400 space-y-3">
+                            <i data-lucide="box-select" class="w-12 h-12 opacity-50"></i>
+                            <p class="text-sm">Awaiting analysis...</p>
+                        </div>
+                    </div>
+
+                    <div class="p-5 border-t border-slate-100 flex flex-col gap-4">
+                        <div class="flex items-center justify-between text-sm">
+                            <label for="confidence-threshold" class="text-slate-600 font-medium flex items-center gap-2">
+                                <i data-lucide="sliders-horizontal" class="w-4 h-4"></i> Min Confidence: <span id="conf-val" class="font-bold text-primary-600">50%</span>
+                            </label>
+                            <input type="range" id="confidence-threshold" min="10" max="90" value="50" step="1" class="w-32 accent-primary-600" oninput="app.updateConfidence(this.value)" disabled>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="download-btn" onclick="app.downloadImage()" class="w-1/2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-medium py-2.5 px-3 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed text-sm">
+                                <i data-lucide="download" class="w-4 h-4"></i> Export
+                            </button>
+                            <button id="save-btn" onclick="app.saveCurrentAnalysis()" class="w-1/2 bg-primary-600 hover:bg-primary-700 text-white font-medium py-2.5 px-3 rounded-xl transition-colors shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed text-sm">
+                                <i data-lucide="save" class="w-4 h-4"></i> Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= HISTORY VIEW ================= -->
+        <div id="view-history" class="view-section hidden">
+            <div class="flex items-center justify-between mb-8">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="history" class="text-primary-600"></i> Analysis Library
+                    </h2>
+                    <p class="text-slate-500 text-sm mt-1">Your locally saved image analyses.</p>
+                </div>
+                <button onclick="app.clearHistory()" class="text-sm font-medium text-red-500 hover:text-red-700 flex items-center gap-1 transition-colors bg-red-50 px-3 py-1.5 rounded-lg hover:bg-red-100">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i> Clear All
+                </button>
+            </div>
+
+            <!-- History Grid -->
+            <div id="history-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <!-- History items injected here -->
+            </div>
+
+            <!-- Empty State -->
+            <div id="history-empty" class="hidden flex-col items-center justify-center py-20 text-center">
+                <div class="bg-slate-100 p-6 rounded-full mb-4">
+                    <i data-lucide="folder-search" class="w-12 h-12 text-slate-400"></i>
+                </div>
+                <h3 class="text-lg font-semibold text-slate-700">No saved analyses yet</h3>
+                <p class="text-slate-500 mt-2 max-w-sm mb-6">Analyze some images and save them to build your personal local library.</p>
+                <button onclick="app.showView('upload')" class="bg-white border border-slate-300 hover:border-primary-500 hover:text-primary-600 text-slate-700 font-medium py-2 px-6 rounded-xl transition-all shadow-sm">
+                    Start Analyzing
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-auto border-t border-slate-200 bg-white py-6">
+        <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-center items-center gap-2 sm:gap-4 text-sm text-slate-500">
+            <div class="flex items-center gap-2">
+                Powered by <span class="font-semibold text-slate-700">TensorFlow.js</span> & <span class="font-semibold text-slate-700">Dexie.js</span>
+            </div>
+            <span class="hidden sm:inline text-slate-300">|</span>
+            <div class="flex items-center gap-1">
+                <i data-lucide="shield-check" class="w-4 h-4 text-green-500"></i> 100% Local Privacy
+            </div>
+            <span class="hidden sm:inline text-slate-300">|</span>
+            <div class="flex items-center gap-1">
+                Developed by <a href="https://github.com/Sadew-Dev" target="_blank" rel="noopener noreferrer" class="font-semibold text-primary-600 hover:text-primary-700 transition-colors flex items-center gap-1"><i data-lucide="github" class="w-4 h-4"></i> Sadew Dev</a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- ================= APPLICATION LOGIC ================= -->
+    <script>
+        const app = {
+            model: null,
+            db: null,
+            isModelReady: false,
+            currentAnalysis: null,
+            rawPredictions: [],
+            minConfidence: 0.5,
+            canvasDimensions: null,
+
+            // Color palette for different object classes to make boxes distinct
+            colors: [
+                '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', 
+                '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#14b8a6'
+            ],
+
+            async init() {
+                lucide.createIcons();
+                this.initDB();
+                this.setupEventListeners();
+                await this.loadAIModel();
+            },
+
+            initDB() {
+                this.db = new Dexie('VisionaryDB');
+                this.db.version(1).stores({
+                    history: '++id, timestamp, image, objects'
+                });
+            },
+
+            async loadAIModel() {
+                const statusBadge = document.getElementById('model-status');
+                const fileInput = document.getElementById('file-input');
+                const uploadText = document.getElementById('upload-text');
+
+                try {
+                    this.model = await cocoSsd.load();
+                    this.isModelReady = true;
+
+                    statusBadge.className = "hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700";
+                    statusBadge.innerHTML = `<i data-lucide="check-circle-2" class="w-4 h-4"></i> Model Ready`;
+                    fileInput.disabled = false;
+                    uploadText.textContent = "Ready! Drag & drop an image or click to browse.";
+                    lucide.createIcons();
+                } catch (error) {
+                    console.error("Failed to load model:", error);
+                    statusBadge.className = "hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700";
+                    statusBadge.innerHTML = `<i data-lucide="alert-circle" class="w-4 h-4"></i> Load Failed`;
+                    uploadText.textContent = "Failed to load AI model. Please refresh the page.";
+                    lucide.createIcons();
+                }
+            },
+
+            setupEventListeners() {
+                const dropZone = document.getElementById('drop-zone');
+                const fileInput = document.getElementById('file-input');
+
+                ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                    dropZone.addEventListener(eventName, e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }, false);
+                });
+
+                ['dragenter', 'dragover'].forEach(eventName => {
+                    dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+                });
+
+                ['dragleave', 'drop'].forEach(eventName => {
+                    dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+                });
+
+                dropZone.addEventListener('drop', (e) => {
+                    const dt = e.dataTransfer;
+                    const files = dt.files;
+                    if (files.length) this.handleFile(files[0]);
+                });
+
+                fileInput.addEventListener('change', function() {
+                    if (this.files.length) app.handleFile(this.files[0]);
+                });
+            },
+
+            showView(viewId) {
+                document.querySelectorAll('.view-section').forEach(el => {
+                    el.classList.add('hidden');
+                    el.classList.remove('block', 'animate-fade-in');
+                });
+
+                const target = document.getElementById(`view-${viewId}`);
+                if (target) {
+                    target.classList.remove('hidden');
+                    target.classList.add('block');
+                    
+                    if (viewId === 'history') {
+                        this.loadHistory();
+                    } else if (viewId === 'upload') {
+                        document.getElementById('file-input').value = '';
+                    }
+                }
+            },
+
+            handleFile(file) {
+                if (!this.isModelReady) {
+                    alert("Please wait for the AI model to finish loading.");
+                    return;
+                }
+                if (!file.type.match('image.*')) {
+                    alert("Please select an image file (JPG, PNG, WEBP).");
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = (e) => this.processImage(e.target.result);
+                reader.readAsDataURL(file);
+            },
+
+            async processImage(dataUrl) {
+                this.showView('analysis');
+                const imgElement = document.getElementById('source-image');
+                const canvas = document.getElementById('analysis-canvas');
+                const ctx = canvas.getContext('2d');
+                const loader = document.getElementById('analysis-loader');
+                const resultsList = document.getElementById('results-list');
+                const saveBtn = document.getElementById('save-btn');
+                const downloadBtn = document.getElementById('download-btn');
+                const confSlider = document.getElementById('confidence-threshold');
+
+                loader.classList.remove('hidden');
+                resultsList.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-slate-400 space-y-3"><div class="loader"></div><p class="text-sm">Running inference...</p></div>`;
+                saveBtn.disabled = true;
+                downloadBtn.disabled = true;
+                confSlider.disabled = true;
+
+                imgElement.onload = async () => {
+                    let w = imgElement.naturalWidth;
+                    let h = imgElement.naturalHeight;
+                    const MAX_DIMENSION = 1200;
+                    
+                    if (w > MAX_DIMENSION || h > MAX_DIMENSION) {
+                        const ratio = Math.min(MAX_DIMENSION / w, MAX_DIMENSION / h);
+                        w = Math.round(w * ratio);
+                        h = Math.round(h * ratio);
+                    }
+
+                    canvas.width = w;
+                    canvas.height = h;
+                    ctx.drawImage(imgElement, 0, 0, w, h);
+
+                    this.canvasDimensions = { 
+                        w, h, 
+                        scaleX: w / imgElement.naturalWidth, 
+                        scaleY: h / imgElement.naturalHeight 
+                    };
+
+                    try {
+                        const predictCanvas = document.createElement('canvas');
+                        predictCanvas.width = imgElement.naturalWidth;
+                        predictCanvas.height = imgElement.naturalHeight;
+                        predictCanvas.getContext('2d').drawImage(imgElement, 0, 0);
+
+                        this.rawPredictions = await this.model.detect(predictCanvas);
+                        this.renderFilteredPredictions();
+                        
+                        saveBtn.disabled = false;
+                        downloadBtn.disabled = false;
+                        confSlider.disabled = false;
+                    } catch (error) {
+                        console.error("Detection Error: ", error);
+                        resultsList.innerHTML = `<div class="text-red-500 p-4 bg-red-50 rounded-lg text-sm"><i data-lucide="alert-triangle" class="w-5 h-5 inline mr-1"></i> Analysis failed. Image might be too complex or an error occurred.</div>`;
+                        lucide.createIcons();
+                    } finally {
+                        loader.classList.add('hidden');
+                    }
+                };
+                imgElement.src = dataUrl;
+            },
+
+            updateConfidence(value) {
+                document.getElementById('conf-val').textContent = value + '%';
+                this.minConfidence = parseInt(value) / 100;
+                this.renderFilteredPredictions();
+            },
+
+            renderFilteredPredictions() {
+                const canvas = document.getElementById('analysis-canvas');
+                const ctx = canvas.getContext('2d');
+                const imgElement = document.getElementById('source-image');
+                
+                // Redraw original image
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(imgElement, 0, 0, canvas.width, canvas.height);
+
+                // Filter predictions based on confidence
+                const filtered = this.rawPredictions.filter(p => p.score >= this.minConfidence);
+
+                // Scale bounding boxes
+                const scaledPredictions = filtered.map(p => ({
+                    ...p,
+                    bbox: [
+                        p.bbox[0] * this.canvasDimensions.scaleX,
+                        p.bbox[1] * this.canvasDimensions.scaleY,
+                        p.bbox[2] * this.canvasDimensions.scaleX,
+                        p.bbox[3] * this.canvasDimensions.scaleY
+                    ]
+                }));
+
+                this.drawPredictions(canvas, scaledPredictions);
+                this.renderResults(scaledPredictions);
+
+                // Update current analysis state for saving
+                this.currentAnalysis = {
+                    timestamp: Date.now(),
+                    image: canvas.toDataURL('image/jpeg', 0.8),
+                    objects: filtered.map(p => ({ class: p.class, score: p.score }))
+                };
+            },
+
+            drawPredictions(canvas, predictions) {
+                const ctx = canvas.getContext('2d');
+                predictions.forEach((prediction, index) => {
+                    const [x, y, width, height] = prediction.bbox;
+                    const color = this.colors[index % this.colors.length];
+                    
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = Math.max(2, canvas.width / 300);
+                    ctx.strokeRect(x, y, width, height);
+
+                    const text = `${prediction.class} (${Math.round(prediction.score * 100)}%)`;
+                    ctx.font = `bold ${Math.max(12, canvas.width / 50)}px Inter, sans-serif`;
+                    const textMetrics = ctx.measureText(text);
+                    const textWidth = textMetrics.width;
+                    const textHeight = parseInt(ctx.font, 10);
+
+                    ctx.fillStyle = color;
+                    const labelY = y > textHeight + 10 ? y - textHeight - 8 : y;
+                    ctx.fillRect(x - 2, labelY, textWidth + 10, textHeight + 8);
+
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fillText(text, x + 3, labelY + textHeight);
+                });
+            },
+
+            renderResults(predictions) {
+                const container = document.getElementById('results-list');
+                const countText = document.getElementById('detection-count');
+                
+                countText.textContent = `${predictions.length} object${predictions.length !== 1 ? 's' : ''} found`;
+
+                if (predictions.length === 0) {
+                    container.innerHTML = `
+                        <div class="flex flex-col items-center justify-center h-full text-slate-500 space-y-3 bg-slate-50 rounded-xl p-6">
+                            <i data-lucide="search-x" class="w-10 h-10 opacity-50"></i>
+                            <p class="text-sm text-center">No distinct objects detected above ${Math.round(this.minConfidence * 100)}% confidence.</p>
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = `
+                        <ul class="space-y-3">
+                            ${predictions.map((p, i) => {
+                                const color = this.colors[i % this.colors.length];
+                                const percent = Math.round(p.score * 100);
+                                return `
+                                <li class="bg-white border border-slate-100 p-3 rounded-xl shadow-sm flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-4 h-4 rounded-full shadow-sm" style="background-color: ${color}"></div>
+                                        <span class="font-semibold text-slate-700 capitalize">${p.class}</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-24 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                            <div class="h-full rounded-full" style="width: ${percent}%; background-color: ${color}"></div>
+                                        </div>
+                                        <span class="text-xs font-bold text-slate-500 w-8 text-right">${percent}%</span>
+                                    </div>
+                                </li>
+                                `;
+                            }).join('')}
+                        </ul>
+                    `;
+                }
+                lucide.createIcons();
+            },
+
+            downloadImage() {
+                if (!this.currentAnalysis) return;
+                const canvas = document.getElementById('analysis-canvas');
+                const link = document.createElement('a');
+                link.download = `visionary-analysis-${Date.now()}.jpg`;
+                link.href = canvas.toDataURL('image/jpeg', 0.9);
+                link.click();
+            },
+
+            async saveCurrentAnalysis() {
+                if (!this.currentAnalysis) return;
+                const btn = document.getElementById('save-btn');
+                const originalHTML = btn.innerHTML;
+                try {
+                    btn.innerHTML = `<div class="loader w-4 h-4 border-2 border-white border-t-transparent mr-2"></div> Saving...`;
+                    btn.disabled = true;
+                    await this.db.history.add(this.currentAnalysis);
+                    btn.innerHTML = `<i data-lucide="check" class="w-4 h-4"></i> Saved`;
+                    btn.classList.replace('bg-primary-600', 'bg-green-600');
+                    btn.classList.replace('hover:bg-primary-700', 'hover:bg-green-700');
+                    lucide.createIcons();
+                    setTimeout(() => {
+                        btn.innerHTML = originalHTML;
+                        btn.classList.replace('bg-green-600', 'bg-primary-600');
+                        btn.classList.replace('hover:bg-green-700', 'hover:bg-primary-700');
+                        btn.disabled = false;
+                        lucide.createIcons();
+                    }, 2000);
+                } catch (error) {
+                    console.error("Failed to save:", error);
+                    alert("Could not save to local database. Quota might be full.");
+                    btn.innerHTML = originalHTML;
+                    btn.disabled = false;
+                }
+            },
+
+            async loadHistory() {
+                const grid = document.getElementById('history-grid');
+                const emptyState = document.getElementById('history-empty');
+                try {
+                    const items = await this.db.history.orderBy('timestamp').reverse().toArray();
+                    if (items.length === 0) {
+                        grid.innerHTML = '';
+                        emptyState.classList.remove('hidden');
+                        emptyState.classList.add('flex');
+                    } else {
+                        emptyState.classList.add('hidden');
+                        emptyState.classList.remove('flex');
+                        grid.innerHTML = items.map(item => {
+                            const date = new Date(item.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+                            const topObjects = item.objects.slice(0, 3).map(o => o.class).join(', ');
+                            const extraCount = item.objects.length > 3 ? `+${item.objects.length - 3}` : '';
+                            return `
+                            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-shadow group relative flex flex-col">
+                                <div class="h-48 overflow-hidden bg-slate-100 relative">
+                                    <img src="${item.image}" alt="Analyzed" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
+                                    <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                                    <div class="absolute bottom-3 left-3 flex gap-1 flex-wrap pr-3">
+                                        <span class="bg-primary-600/90 backdrop-blur text-white text-[10px] font-bold px-2 py-1 rounded-md">
+                                            ${item.objects.length} Objects
+                                        </span>
+                                    </div>
+                                    <button onclick="app.deleteHistoryItem(${item.id})" class="absolute top-2 right-2 bg-red-500/80 hover:bg-red-600 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur" title="Delete">
+                                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                                <div class="p-4 flex flex-col flex-grow">
+                                    <p class="text-xs text-slate-400 mb-1 flex items-center gap-1"><i data-lucide="calendar" class="w-3 h-3"></i> ${date}</p>
+                                    <p class="text-sm font-medium text-slate-700 line-clamp-2 capitalize">
+                                        ${topObjects || 'No objects detected'} ${extraCount ? `<span class="text-primary-500 font-bold">${extraCount}</span>` : ''}
+                                    </p>
+                                </div>
+                            </div>
+                            `;
+                        }).join('');
+                        lucide.createIcons();
+                    }
+                } catch (error) {
+                    console.error("Failed to load history:", error);
+                    grid.innerHTML = '<p class="text-red-500 col-span-full">Failed to load history from database.</p>';
+                }
+            },
+
+            async deleteHistoryItem(id) {
+                if(confirm("Delete this analysis from your history?")) {
+                    await this.db.history.delete(id);
+                    this.loadHistory();
+                }
+            },
+
+            async clearHistory() {
+                const count = await this.db.history.count();
+                if(count === 0) return;
+                if(confirm("Are you sure you want to delete ALL saved analyses? This cannot be undone.")) {
+                    await this.db.history.clear();
+                    this.loadHistory();
+                }
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            app.init();
+        });
+    </script>
+</body>
+</html>
